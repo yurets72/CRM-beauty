@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Маникюр CRM — MVP</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -10,6 +10,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: #faf7f5; color: #2b2b2b; padding-bottom: 90px;
     max-width: 500px; margin: 0 auto; min-height: 100vh;
+    overscroll-behavior-y: none;
   }
   header {
     background: #fff; padding: 16px 20px; position: sticky; top: 0; z-index: 10;
@@ -27,7 +28,10 @@
     font-family: inherit; transition: all 0.15s;
   }
   .tabs button.active { color: #c9817a; border-bottom-color: #c9817a; font-weight: 600; }
-  .tabs .count { background: #c9817a; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 4px; }
+  .tabs .count {
+    display: inline-block; background: #c9817a; color: #fff; border-radius: 10px;
+    padding: 1px 7px; font-size: 11px; margin-left: 4px;
+  }
   .container { padding: 16px; }
   .card {
     background: #fff; border-radius: 16px; padding: 18px; margin-bottom: 12px;
@@ -43,6 +47,12 @@
     display: inline-block; background: #faf3f0; color: #c9817a; font-weight: 600;
     padding: 4px 10px; border-radius: 8px; font-size: 13px; margin-right: 8px;
   }
+  .tag {
+    display: inline-block; font-size: 11px; padding: 3px 9px; border-radius: 10px;
+    font-weight: 600; margin-right: 6px;
+  }
+  .tag-visit { background: #faf3f0; color: #c9817a; }
+  .tag-return { background: #f0f5ee; color: #6b8a68; }
   .btn {
     display: inline-block; padding: 12px 18px; border-radius: 12px; border: none;
     font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none;
@@ -61,6 +71,8 @@
     line-height: 1; z-index: 50;
   }
   .empty { text-align: center; color: #b0a8a2; padding: 50px 20px; font-size: 14px; line-height: 1.6; }
+
+  /* МОДАЛКА */
   .modal-bg {
     position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none;
     align-items: flex-end; z-index: 100;
@@ -68,15 +80,38 @@
   .modal-bg.open { display: flex; }
   .modal {
     background: #fff; width: 100%; max-width: 500px; margin: 0 auto;
-    border-radius: 24px 24px 0 0; padding: 24px 20px; max-height: 92vh; overflow-y: auto;
+    border-radius: 24px 24px 0 0; padding: 8px 20px 24px; max-height: 92vh;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    transform: translateY(100%); transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    position: relative;
   }
-  .modal h2 { font-size: 19px; margin-bottom: 18px; font-weight: 600; }
-  .modal label { display: block; font-size: 12px; color: #b0a8a2; margin: 14px 0 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .modal-bg.open .modal { transform: translateY(0); }
+  .modal.dragging { transition: none; }
+  .modal-handle {
+    width: 40px; height: 4px; background: #e0d8d3; border-radius: 2px;
+    margin: 8px auto 4px; cursor: grab;
+  }
+  .modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0 12px; position: sticky; top: 0; background: #fff; z-index: 2;
+  }
+  .modal-header h2 { font-size: 19px; font-weight: 600; }
+  .modal-header .close {
+    background: #f5f0ec; border: none; width: 32px; height: 32px;
+    border-radius: 50%; font-size: 16px; cursor: pointer; color: #7a7370;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal label {
+    display: block; font-size: 12px; color: #b0a8a2; margin: 14px 0 6px;
+    font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+  }
   .modal input, .modal select, .modal textarea {
     width: 100%; padding: 13px; border: 1.5px solid #f0ebe7; border-radius: 12px;
-    font-size: 15px; font-family: inherit; background: #fdfbf9;
+    font-size: 15px; font-family: inherit; background: #fdfbf9; color: #2b2b2b;
   }
-  .modal input:focus, .modal select:focus, .modal textarea:focus { outline: none; border-color: #c9817a; background: #fff; }
+  .modal input:focus, .modal select:focus, .modal textarea:focus {
+    outline: none; border-color: #c9817a; background: #fff;
+  }
   .modal textarea { resize: vertical; }
   .row { display: flex; gap: 10px; }
   .row > * { flex: 1; }
@@ -100,10 +135,6 @@
     line-height: 1.5; color: #2b2b2b; margin: 12px 0; white-space: pre-wrap;
     border-left: 3px solid #c9817a;
   }
-  .stat-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f5f0ec; font-size: 14px; }
-  .stat-row:last-child { border-bottom: none; }
-  .stat-row .label { color: #b0a8a2; }
-  .stat-row .value { font-weight: 600; }
 </style>
 </head>
 <body>
@@ -128,11 +159,13 @@
 </div>
 
 <script>
-console.log('✅ MVP загружен');
+console.log('✅ MVP v2 загружен');
 
 // ============ КОНСТАНТЫ ============
-const CYCLE_DEFAULT = 21; // маникюр
-const TEMPLATE = `{имя}, привет! 👋
+const CYCLE_DEFAULT = 21;
+const SERVICES = ['Маникюр', 'Педикюр', 'Наращивание', 'Коррекция', 'Дизайн', 'Другое'];
+
+const TEMPLATE_FINISH = `{имя}, привет! 👋
 Пора обновить маникюр 💅
 У меня есть окошки на этой неделе. Когда тебе удобно?`;
 
@@ -140,38 +173,50 @@ const TEMPLATE_DUE = `{имя}, привет! 👋
 Твои ноготочки уже подросли 💅
 Давай запишемся? Когда удобно?`;
 
-const SERVICES = ['Маникюр', 'Педикюр', 'Наращивание', 'Коррекция', 'Дизайн', 'Другое'];
+const TEMPLATE_REMIND_VISIT = `{имя}, привет! 👋
+Напоминаю — ты записана {когда} в {время}.
+Жду тебя! Если что-то изменилось — напиши 💅`;
 
 // ============ ХРАНИЛИЩЕ ============
 function load() {
   try {
-    return JSON.parse(localStorage.getItem('nails_crm') || '{"clients":[],"appointments":[]}');
+    const raw = localStorage.getItem('nails_crm');
+    if (!raw) return { clients: [], appointments: [] };
+    const data = JSON.parse(raw);
+    return { clients: data.clients || [], appointments: data.appointments || [] };
   } catch { return { clients: [], appointments: [] }; }
 }
-function save(data) { localStorage.setItem('nails_crm', JSON.stringify(data)); }
+function save() { localStorage.setItem('nails_crm', JSON.stringify(db)); }
 
 let db = load();
 let currentTab = 'schedule';
 
 // ============ УТИЛИТЫ ============
 function today() { return new Date().toISOString().slice(0,10); }
-function daysFrom(dateStr) {
-  const d = new Date(dateStr); const now = new Date(today());
-  return Math.round((d - now) / (1000*60*60*24));
-}
+function tomorrow() { return addDays(1); }
 function addDays(days) {
   const d = new Date(); d.setDate(d.getDate() + days);
   return d.toISOString().slice(0,10);
 }
+function daysFrom(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr); const now = new Date(today());
+  return Math.round((d - now) / (1000*60*60*24));
+}
 function fmtDate(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  return new Date(dateStr).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 }
 function fmtShort(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  return new Date(dateStr).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+function fmtWhen(dateStr) {
+  const dd = daysFrom(dateStr);
+  if (dd === 0) return 'сегодня';
+  if (dd === 1) return 'завтра';
+  if (dd === 2) return 'послезавтра';
+  return fmtShort(dateStr);
 }
 function esc(s) {
   return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -179,11 +224,47 @@ function esc(s) {
 function uid() { return 'c' + Date.now() + Math.random().toString(36).slice(2,6); }
 
 function getClient(id) { return db.clients.find(c => c.id === id); }
-function getDueClients() {
-  return db.clients
-    .filter(c => c.nextVisit && daysFrom(c.nextVisit) <= 3)
-    .sort((a,b) => new Date(a.nextVisit) - new Date(b.nextVisit));
+
+// Клиенты, которым пора напомнить (о визите ИЛИ о возврате)
+function getDueItems() {
+  const items = [];
+
+  // 1. Записи на сегодня/завтра — напомнить о визите
+  const upcoming = db.appointments.filter(a => {
+    if (a.status === 'cancelled') return false;
+    const dd = daysFrom(a.date);
+    return dd !== null && dd >= 0 && dd <= 1;
+  });
+  upcoming.forEach(a => {
+    const c = getClient(a.clientId);
+    if (c && c.phone) {
+      items.push({
+        type: 'visit',
+        client: c,
+        appointment: a,
+        sortKey: daysFrom(a.date) * 100 + (parseInt(a.time) || 0)
+      });
+    }
+  });
+
+  // 2. Клиенты, у которых прошёл цикл (пора записаться снова)
+  db.clients.forEach(c => {
+    if (!c.nextVisit || !c.phone) return;
+    const dd = daysFrom(c.nextVisit);
+    if (dd === null || dd > 3) return;
+    // Не дублировать, если уже есть запись на ближайшие дни
+    const hasUpcoming = upcoming.some(a => a.clientId === c.id);
+    if (hasUpcoming) return;
+    items.push({
+      type: 'return',
+      client: c,
+      sortKey: dd * 100
+    });
+  });
+
+  return items.sort((a,b) => a.sortKey - b.sortKey);
 }
+
 function getTodayAppointments() {
   return db.appointments
     .filter(a => a.date === today() && a.status !== 'cancelled')
@@ -192,15 +273,15 @@ function getTodayAppointments() {
 
 // ============ РЕНДЕР ============
 function render() {
-  document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
+  document.getElementById('todayLabel').textContent =
+    new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
 
-  const due = getDueClients();
+  const due = getDueItems();
   const cnt = document.getElementById('dueCount');
   if (due.length) { cnt.style.display = 'inline-block'; cnt.textContent = due.length; }
   else { cnt.style.display = 'none'; }
 
   const v = document.getElementById('view');
-
   if (currentTab === 'schedule') renderSchedule(v);
   if (currentTab === 'clients') renderClients(v);
   if (currentTab === 'due') renderDue(v, due);
@@ -236,9 +317,9 @@ function renderClients(v) {
     const dd = c.nextVisit ? daysFrom(c.nextVisit) : null;
     const status = c.nextVisit
       ? (dd <= 3
-          ? `<div class="due">🔔 Пора напомнить · ${fmtShort(c.nextVisit)}</div>`
+          ? `<div class="due">🔔 Пора записать снова · с ${fmtShort(c.nextVisit)}</div>`
           : `<div class="ok">✓ Следующий визит: ${fmtShort(c.nextVisit)} (через ${dd} дн.)</div>`)
-      : `<div class="meta">Дата возврата не задана</div>`;
+      : `<div class="meta">Дата следующего визита не задана</div>`;
     return `
       <div class="card clickable" onclick="openClient('${c.id}')">
         <h3>${esc(c.name)}</h3>
@@ -248,37 +329,55 @@ function renderClients(v) {
   }).join('');
 }
 
-function renderDue(v, due) {
-  if (!due.length) {
+function renderDue(v, items) {
+  if (!items.length) {
     v.innerHTML = `<div class="empty">Пока никого не пора напоминать 🎉<br><br>Заходите позже.</div>`;
     return;
   }
-  v.innerHTML = due.map(c => {
-    const dd = daysFrom(c.nextVisit);
-    const overdue = dd < 0;
-    const label = overdue
-      ? `Просрочено на ${Math.abs(dd)} дн.`
-      : dd === 0 ? 'Пора напомнить сегодня' : `Пора напомнить (через ${dd} дн.)`;
-    return `
-      <div class="card">
-        <h3>${esc(c.name)}</h3>
-        <div class="meta">${esc(c.phone || c.telegram || 'без контакта')} · ${esc(c.service || '')}</div>
-        <div class="due">${label}</div>
-        <a class="btn btn-sms btn-full" href="${smsLink(c, TEMPLATE_DUE)}">Напомнить в SMS</a>
-        <button class="btn btn-ghost btn-full" onclick="markBooked('${c.id}')">Записалась ✅</button>
-      </div>`;
+  v.innerHTML = items.map(item => {
+    const c = item.client;
+    if (item.type === 'visit') {
+      const a = item.appointment;
+      const text = TEMPLATE_REMIND_VISIT
+        .replace(/\{имя\}/g, c.name.split(' ')[0])
+        .replace(/\{когда\}/g, fmtWhen(a.date))
+        .replace(/\{время\}/g, a.time || '');
+      return `
+        <div class="card">
+          <div><span class="tag tag-visit">НАПОМНИТЬ О ВИЗИТЕ</span></div>
+          <h3 style="margin-top:8px;">${esc(c.name)}</h3>
+          <div class="meta">${esc(a.service || c.service || '')} · ${esc(c.phone || '')}</div>
+          <div class="due">${fmtWhen(a.date)}, ${a.time || ''}</div>
+          <a class="btn btn-sms btn-full" href="${smsLink(c, text)}">📩 Напомнить в SMS</a>
+          <button class="btn btn-ghost btn-full" onclick="confirmVisit('${a.id}')">Пришла ✓</button>
+          <button class="btn btn-danger btn-full" onclick="cancelAppt('${a.id}')">Отменить</button>
+        </div>`;
+    } else {
+      const dd = daysFrom(c.nextVisit);
+      const overdue = dd < 0;
+      const label = overdue
+        ? `Пора записать снова (просрочено ${Math.abs(dd)} дн.)`
+        : dd === 0 ? 'Пора записать снова — сегодня' : `Пора записать снова (через ${dd} дн.)`;
+      const text = TEMPLATE_DUE.replace(/\{имя\}/g, c.name.split(' ')[0]);
+      return `
+        <div class="card">
+          <div><span class="tag tag-return">ПОРА ЗАПИСАТЬСЯ</span></div>
+          <h3 style="margin-top:8px;">${esc(c.name)}</h3>
+          <div class="meta">${esc(c.phone || '')} · ${esc(c.service || '')}</div>
+          <div class="ok" style="font-weight:600;">${label}</div>
+          <a class="btn btn-sms btn-full" href="${smsLink(c, text)}">📩 Напомнить в SMS</a>
+          <button class="btn btn-ghost btn-full" onclick="markBooked('${c.id}')">Записалась ✓</button>
+        </div>`;
+    }
   }).join('');
 }
 
-// ============ SMS ССЫЛКА ============
-function smsLink(client, tpl) {
+function smsLink(client, text) {
   const phone = (client.phone || '').replace(/\D/g, '');
-  const text = tpl.replace(/\{имя\}/g, client.name.split(' ')[0]);
-  // iOS и Android поддерживают sms:?body=, но по-разному; используем универсальный вариант
   return `sms:${phone ? '+' + phone : ''}?&body=${encodeURIComponent(text)}`;
 }
 
-// ============ ЭКРАН "ЗАВЕРШИТЬ ВИЗИТ" (ВАУ) ============
+// ============ ВАУ: ЗАВЕРШИТЬ ВИЗИТ ============
 function finishVisit(apptId) {
   const a = db.appointments.find(x => x.id === apptId);
   if (!a) return;
@@ -287,10 +386,14 @@ function finishVisit(apptId) {
 
   const cycle = c.cycleDays || CYCLE_DEFAULT;
   const nextDate = addDays(cycle);
-  const text = TEMPLATE.replace(/\{имя\}/g, c.name.split(' ')[0]);
+  const text = TEMPLATE_FINISH.replace(/\{имя\}/g, c.name.split(' ')[0]);
 
   document.getElementById('modalContent').innerHTML = `
-    <h2>✨ Визит завершён</h2>
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>✨ Визит завершён</h2>
+      <button class="close" onclick="closeModal()">✕</button>
+    </div>
 
     <div class="vau-box">
       <div class="big">💅</div>
@@ -299,10 +402,10 @@ function finishVisit(apptId) {
       <div class="label" style="margin-top:6px;">через ${cycle} дней</div>
     </div>
 
-    <label>Сообщение клиенту (можно поправить)</label>
-    <div class="msg-preview" id="msgPreview">${esc(text)}</div>
+    <label>Сообщение клиенту</label>
+    <div class="msg-preview">${esc(text)}</div>
 
-    <a class="btn btn-sms btn-full" id="smsBtn" href="${smsLink(c, text)}">📩 Отправить SMS</a>
+    <a class="btn btn-sms btn-full" href="${smsLink(c, text)}">📩 Отправить SMS</a>
     <button class="btn btn-primary btn-full" onclick="confirmFinish('${c.id}', '${nextDate}', ${a.sum || 0})">Записать на ${fmtShort(nextDate)} ✓</button>
     <button class="btn btn-ghost btn-full" onclick="closeModal()">Позже</button>
   `;
@@ -316,11 +419,29 @@ function confirmFinish(clientId, nextDate, sum) {
   c.nextVisit = nextDate;
   c.history = c.history || [];
   c.history.unshift({ date: today(), service: c.service, sum });
-
-  // Убираем сегодняшнюю запись
   db.appointments = db.appointments.filter(a => !(a.clientId === clientId && a.date === today()));
+  save(); closeModal(); render();
+}
 
-  save(db); closeModal(); render();
+function confirmVisit(apptId) {
+  const a = db.appointments.find(x => x.id === apptId);
+  if (!a) return;
+  const c = getClient(a.clientId);
+  if (c) {
+    c.lastVisit = today();
+    const cycle = c.cycleDays || CYCLE_DEFAULT;
+    c.nextVisit = addDays(cycle);
+    c.history = c.history || [];
+    c.history.unshift({ date: today(), service: a.service, sum: a.sum || 0 });
+  }
+  db.appointments = db.appointments.filter(x => x.id !== apptId);
+  save(); render();
+}
+
+function cancelAppt(apptId) {
+  if (!confirm('Отменить запись?')) return;
+  db.appointments = db.appointments.filter(a => a.id !== apptId);
+  save(); render();
 }
 
 function markBooked(clientId) {
@@ -328,7 +449,7 @@ function markBooked(clientId) {
   if (!c) return;
   const cycle = c.cycleDays || CYCLE_DEFAULT;
   c.nextVisit = addDays(cycle);
-  save(db); render();
+  save(); render();
 }
 
 // ============ КАРТОЧКА КЛИЕНТА ============
@@ -342,7 +463,11 @@ function openClient(id) {
   const svcOptions = SERVICES.map(s => `<option ${c.service === s ? 'selected' : ''}>${s}</option>`).join('');
 
   document.getElementById('modalContent').innerHTML = `
-    <h2>${esc(c.name)}</h2>
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>${esc(c.name)}</h2>
+      <button class="close" onclick="closeModal()">✕</button>
+    </div>
 
     <label>Имя</label>
     <input id="fName" value="${esc(c.name)}">
@@ -356,7 +481,7 @@ function openClient(id) {
     <label>Услуга</label>
     <select id="fService">${svcOptions}</select>
 
-    <label>Цикл возврата (дней)</label>
+    <label>Напомнить снова через (дней)</label>
     <input id="fCycle" type="number" value="${c.cycleDays || CYCLE_DEFAULT}">
 
     <label>Следующий визит</label>
@@ -364,7 +489,7 @@ function openClient(id) {
     <div class="chip-row" id="chips"></div>
 
     <label>Заметки</label>
-    <textarea id="fNotes" rows="3" placeholder="Аллергии, предпочтения...">${esc(c.notes || '')}</textarea>
+    <textarea id="fNotes" rows="3" placeholder="Любит форму миндаль, чувствительная кутикула...">${esc(c.notes || '')}</textarea>
 
     <label>История визитов</label>
     ${historyHtml}
@@ -401,20 +526,24 @@ function saveClient(id) {
   c.cycleDays = parseInt(document.getElementById('fCycle').value) || CYCLE_DEFAULT;
   c.nextVisit = document.getElementById('fNext').value || null;
   c.notes = document.getElementById('fNotes').value.trim();
-  save(db); closeModal(); render();
+  save(); closeModal(); render();
 }
 
 function deleteClient(id) {
   if (!confirm('Удалить клиента?')) return;
   db.clients = db.clients.filter(c => c.id !== id);
   db.appointments = db.appointments.filter(a => a.clientId !== id);
-  save(db); closeModal(); render();
+  save(); closeModal(); render();
 }
 
-// ============ НОВЫЙ КЛИЕНТ + ЗАПИСЬ ============
+// ============ НОВАЯ ЗАПИСЬ ============
 function openNewAppointment() {
   document.getElementById('modalContent').innerHTML = `
-    <h2>Новая запись</h2>
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>Новая запись</h2>
+      <button class="close" onclick="closeModal()">✕</button>
+    </div>
 
     <label>Клиент</label>
     <select id="nClient">
@@ -476,7 +605,7 @@ function createAppointment() {
     clientId = c.id;
   }
 
-  const appt = {
+  db.appointments.push({
     id: 'a' + Date.now(),
     clientId,
     date: document.getElementById('nDate').value,
@@ -484,14 +613,57 @@ function createAppointment() {
     service: document.getElementById('nService').value,
     status: 'scheduled',
     sum: 0
-  };
-  db.appointments.push(appt);
-  save(db); closeModal(); render();
+  });
+  save(); closeModal(); render();
 }
 
-// ============ МОДАЛКА ============
-function openModal() { document.getElementById('modalBg').classList.add('open'); }
-function closeModal() { document.getElementById('modalBg').classList.remove('open'); }
+// ============ МОДАЛКА + СВАЙП ВНИЗ ============
+const modalBg = document.getElementById('modalBg');
+const modalEl = document.getElementById('modalContent');
+let dragStartY = 0, dragCurrentY = 0, isDragging = false;
+
+function openModal() {
+  modalBg.classList.add('open');
+  modalEl.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  modalBg.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Свайп вниз для закрытия
+modalEl.addEventListener('touchstart', e => {
+  // Если скролл вверху ИЛИ тронули за handle/header — начинаем drag
+  const inHeader = e.target.closest('.modal-handle, .modal-header');
+  if (modalEl.scrollTop <= 0 || inHeader) {
+    dragStartY = e.touches[0].clientY;
+    dragCurrentY = dragStartY;
+    isDragging = true;
+  }
+}, { passive: true });
+
+modalEl.addEventListener('touchmove', e => {
+  if (!isDragging) return;
+  dragCurrentY = e.touches[0].clientY;
+  const delta = Math.max(0, dragCurrentY - dragStartY);
+  modalEl.classList.add('dragging');
+  modalEl.style.transform = `translateY(${delta}px)`;
+}, { passive: true });
+
+modalEl.addEventListener('touchend', () => {
+  if (!isDragging) return;
+  const delta = Math.max(0, dragCurrentY - dragStartY);
+  modalEl.classList.remove('dragging');
+  modalEl.style.transform = '';
+  if (delta > 100) closeModal();
+  isDragging = false;
+});
+
+// Закрытие по фону
+modalBg.addEventListener('click', e => {
+  if (e.target === modalBg) closeModal();
+});
 
 // ============ СОБЫТИЯ ============
 document.querySelectorAll('.tabs button').forEach(btn => {
@@ -503,14 +675,13 @@ document.querySelectorAll('.tabs button').forEach(btn => {
   });
 });
 document.getElementById('fabAdd').addEventListener('click', openNewAppointment);
-document.getElementById('modalBg').addEventListener('click', e => {
-  if (e.target.id === 'modalBg') closeModal();
-});
 
 render();
 
-// Экспорт в window для onclick
-Object.assign(window, { openClient, saveClient, deleteClient, finishVisit, confirmFinish, markBooked, pickCycle, createAppointment, closeModal });
+Object.assign(window, {
+  openClient, saveClient, deleteClient, finishVisit, confirmFinish,
+  confirmVisit, cancelAppt, markBooked, pickCycle, createAppointment, closeModal
+});
 </script>
 </body>
 </html>
