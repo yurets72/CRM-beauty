@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Возврат клиентов — демо</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f5f7; color: #1d1d1f; padding-bottom: 80px;
+  }
+  header {
+    background: #fff; padding: 16px; position: sticky; top: 0; z-index: 10;
+    border-bottom: 1px solid #e5e5e7; display: flex; justify-content: space-between; align-items: center;
+  }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header .badge { background: #ff3b30; color: #fff; border-radius: 12px; padding: 2px 8px; font-size: 12px; }
+  .tabs {
+    display: flex; background: #fff; border-bottom: 1px solid #e5e5e7;
+    position: sticky; top: 57px; z-index: 9;
+  }
+  .tabs button {
+    flex: 1; padding: 14px; border: none; background: none; font-size: 14px;
+    color: #86868b; cursor: pointer; border-bottom: 2px solid transparent;
+  }
+  .tabs button.active { color: #0071e3; border-bottom-color: #0071e3; font-weight: 600; }
+  .container { padding: 16px; max-width: 600px; margin: 0 auto; }
+  .card {
+    background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .card h3 { font-size: 16px; margin-bottom: 4px; }
+  .card .meta { font-size: 13px; color: #86868b; margin-bottom: 8px; }
+  .card .due { color: #ff3b30; font-weight: 600; font-size: 13px; }
+  .card .ok { color: #34c759; font-size: 13px; }
+  .btn {
+    display: inline-block; padding: 10px 16px; border-radius: 10px; border: none;
+    font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none;
+    text-align: center;
+  }
+  .btn-primary { background: #0071e3; color: #fff; }
+  .btn-wa { background: #25D366; color: #fff; }
+  .btn-ghost { background: #f0f0f2; color: #1d1d1f; }
+  .btn-full { width: 100%; display: block; margin-top: 8px; }
+  .fab {
+    position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px;
+    border-radius: 50%; background: #0071e3; color: #fff; font-size: 28px;
+    border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,113,227,0.4);
+  }
+  .empty { text-align: center; color: #86868b; padding: 40px 20px; font-size: 14px; }
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none;
+    align-items: flex-end; z-index: 100;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: #fff; width: 100%; max-width: 600px; margin: 0 auto;
+    border-radius: 20px 20px 0 0; padding: 20px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 16px; }
+  .modal label { display: block; font-size: 13px; color: #86868b; margin: 12px 0 4px; }
+  .modal input, .modal select, .modal textarea {
+    width: 100%; padding: 12px; border: 1px solid #e5e5e7; border-radius: 10px;
+    font-size: 15px; font-family: inherit;
+  }
+  .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .chip {
+    padding: 8px 12px; border-radius: 20px; background: #f0f0f2; border: none;
+    font-size: 13px; cursor: pointer;
+  }
+  .chip.selected { background: #0071e3; color: #fff; }
+  .history-item { font-size: 13px; color: #86868b; padding: 6px 0; border-bottom: 1px solid #f0f0f2; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💅 Возврат клиентов</h1>
+  <span class="badge" id="dueBadge" style="display:none">0</span>
+</header>
+
+<div class="tabs">
+  <button class="active" data-tab="clients">Клиенты</button>
+  <button data-tab="due">Пора напомнить <span id="dueCount"></span></button>
+</div>
+
+<div class="container" id="view"></div>
+
+<button class="fab" id="fabAdd">+</button>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script>
+console.log('✅ Скрипт загружен');
+
+// ============ ДАННЫЕ ============
+const SERVICES = [
+  { name: 'Маникюр', cycle: 21 },
+  { name: 'Педикюр', cycle: 28 },
+  { name: 'Шугаринг', cycle: 21 },
+  { name: 'Стрижка', cycle: 30 },
+  { name: 'Окрашивание', cycle: 45 },
+  { name: 'Косметология', cycle: 42 },
+  { name: 'Ресницы', cycle: 21 },
+  { name: 'Брови', cycle: 21 },
+];
+
+const TEMPLATES = {
+  'Маникюр': 'Привет, {name}! Пора обновить маникюр 💅 Есть свободные окошки на этой неделе. Записать?',
+  'Педикюр': 'Привет, {name}! Пора на педикюр 🦶 Когда удобно прийти?',
+  'Шугаринг': 'Привет, {name}! Пора на шугаринг ✨ Записать вас на этой неделе?',
+  'Стрижка': 'Привет, {name}! Пора подстричься ✂️ Есть окошки на этой неделе.',
+  'Окрашивание': 'Привет, {name}! Пора обновить цвет 💇‍♀️ Когда удобно?',
+  'Косметология': 'Привет, {name}! Пора на процедуру ✨ Записать вас?',
+  'Ресницы': 'Привет, {name}! Пора на коррекцию ресничек 👁️ Есть места.',
+  'Брови': 'Привет, {name}! Пора обновить брови ✨ Когда удобно?',
+  'default': 'Привет, {name}! Пора записаться снова 😊 Когда удобно?'
+};
+
+function loadClients() {
+  try { return JSON.parse(localStorage.getItem('clients') || '[]'); } catch { return []; }
+}
+function saveClients(c) { localStorage.setItem('clients', JSON.stringify(c)); }
+
+let clients = loadClients();
+let currentTab = 'clients';
+
+// ============ УТИЛИТЫ ============
+function daysDiff(dateStr) {
+  const d = new Date(dateStr); const now = new Date();
+  return Math.ceil((d - now) / (1000*60*60*24));
+}
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+function isDue(c) {
+  if (!c.nextVisit) return false;
+  return daysDiff(c.nextVisit) <= 3;
+}
+function getDueClients() {
+  return clients.filter(isDue).sort((a,b) => new Date(a.nextVisit) - new Date(b.nextVisit));
+}
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+// ============ РЕНДЕР ============
+function render() {
+  const view = document.getElementById('view');
+  const due = getDueClients();
+
+  const badge = document.getElementById('dueBadge');
+  const dueCount = document.getElementById('dueCount');
+  if (due.length > 0) {
+    badge.style.display = 'inline-block'; badge.textContent = due.length;
+    dueCount.textContent = `(${due.length})`;
+  } else {
+    badge.style.display = 'none'; dueCount.textContent = '';
+  }
+
+  if (currentTab === 'clients') {
+    if (clients.length === 0) {
+      view.innerHTML = '<div class="empty">Пока нет клиентов.<br>Нажмите + внизу, чтобы добавить первого.</div>';
+      return;
+    }
+    view.innerHTML = clients
+      .slice()
+      .sort((a,b) => (a.name || '').localeCompare(b.name || ''))
+      .map(c => {
+        const dd = c.nextVisit ? daysDiff(c.nextVisit) : null;
+        const dueHtml = c.nextVisit
+          ? (isDue(c)
+              ? `<div class="due">🔔 Пора напомнить (${formatDate(c.nextVisit)})</div>`
+              : `<div class="ok">Следующий визит: ${formatDate(c.nextVisit)} (через ${dd} дн.)</div>`)
+          : '<div class="meta">Дата возврата не задана</div>';
+        return `
+          <div class="card" onclick="openClient('${c.id}')">
+            <h3>${escapeHtml(c.name)}</h3>
+            <div class="meta">${escapeHtml(c.service || '')} · ${escapeHtml(c.phone || '')}</div>
+            ${dueHtml}
+          </div>`;
+      }).join('');
+  }
+
+  if (currentTab === 'due') {
+    if (due.length === 0) {
+      view.innerHTML = '<div class="empty">Пока никого не пора напоминать 🎉<br>Заходите позже.</div>';
+      return;
+    }
+    view.innerHTML = due.map(c => {
+      const dd = daysDiff(c.nextVisit);
+      const overdue = dd < 0;
+      return `
+        <div class="card">
+          <h3>${escapeHtml(c.name)}</h3>
+          <div class="meta">${escapeHtml(c.service || '')} · ${escapeHtml(c.phone || '')}</div>
+          <div class="due">${overdue ? `Просрочено на ${Math.abs(dd)} дн.` : `Пора напомнить (${formatDate(c.nextVisit)})`}</div>
+          <a class="btn btn-wa btn-full" href="${waLink(c)}" target="_blank">Отправить в WhatsApp</a>
+          <button type="button" class="btn btn-ghost btn-full" onclick="markVisited('${c.id}')">Записался ✅</button>
+        </div>`;
+    }).join('');
+  }
+}
+
+function waLink(c) {
+  const phone = (c.phone || '').replace(/\D/g, '');
+  const tpl = TEMPLATES[c.service] || TEMPLATES['default'];
+  const text = tpl.replace('{name}', c.name.split(' ')[0]);
+  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+}
+
+// ============ ДЕЙСТВИЯ ============
+function markVisited(id) {
+  const c = clients.find(x => x.id === id);
+  if (!c) return;
+  const today = new Date().toISOString().slice(0,10);
+  c.history = c.history || [];
+  c.history.unshift({ date: today, service: c.service, sum: c.lastSum || 0 });
+  const svc = SERVICES.find(s => s.name === c.service);
+  const cycle = svc ? svc.cycle : 30;
+  const next = new Date(); next.setDate(next.getDate() + cycle);
+  c.nextVisit = next.toISOString().slice(0,10);
+  saveClients(clients);
+  render();
+}
+
+function openClient(id) {
+  const c = clients.find(x => x.id === id);
+  if (!c) return;
+  const historyHtml = (c.history || []).map(h =>
+    `<div class="history-item">${formatDate(h.date)} — ${escapeHtml(h.service || '')}${h.sum ? ' · ' + h.sum + ' ₽' : ''}</div>`
+  ).join('') || '<div class="history-item">Пока нет визитов</div>';
+
+  const svcOptions = SERVICES.map(s =>
+    `<option value="${s.name}" ${c.service === s.name ? 'selected' : ''}>${s.name} (цикл ${s.cycle} дн.)</option>`
+  ).join('');
+
+  document.getElementById('modalContent').innerHTML = `
+    <h2>${escapeHtml(c.name)}</h2>
+    <div class="meta">${escapeHtml(c.phone || '')}</div>
+
+    <label>Услуга</label>
+    <select id="editService">${svcOptions}</select>
+
+    <label>Телефон (для WhatsApp)</label>
+    <input id="editPhone" value="${escapeHtml(c.phone || '')}" placeholder="+7...">
+
+    <label>Заметки</label>
+    <textarea id="editNotes" rows="3" placeholder="Любит короткую стрижку, аллергия на лак...">${escapeHtml(c.notes || '')}</textarea>
+
+    <label>Следующий визит</label>
+    <input type="date" id="editNext" value="${c.nextVisit || ''}">
+    <div class="chip-row" id="chips"></div>
+
+    <label>История визитов</label>
+    ${historyHtml}
+
+    <button type="button" class="btn btn-primary btn-full" style="margin-top:16px" onclick="saveClient('${c.id}')">Сохранить</button>
+    <button type="button" class="btn btn-ghost btn-full" onclick="deleteClient('${c.id}')">Удалить</button>
+  `;
+  renderChips(c);
+  document.getElementById('modalBg').classList.add('open');
+}
+
+function renderChips(c) {
+  const box = document.getElementById('chips');
+  const svc = SERVICES.find(s => s.name === c.service) || { cycle: 30 };
+  const presets = [7, 14, 21, 28, 30, 45, 60];
+  box.innerHTML = presets.map(d =>
+    `<button type="button" class="chip ${svc.cycle === d ? 'selected' : ''}" onclick="setNext(${d}, this)">${d} дн.</button>`
+  ).join('');
+}
+
+function setNext(days, btn) {
+  const d = new Date(); d.setDate(d.getDate() + days);
+  document.getElementById('editNext').value = d.toISOString().slice(0,10);
+  document.querySelectorAll('#chips .chip').forEach(c => c.classList.remove('selected'));
+  if (btn) btn.classList.add('selected');
+}
+
+function saveClient(id) {
+  const c = clients.find(x => x.id === id);
+  if (!c) return;
+  c.service = document.getElementById('editService').value;
+  c.phone = document.getElementById('editPhone').value;
+  c.notes = document.getElementById('editNotes').value;
+  c.nextVisit = document.getElementById('editNext').value || null;
+  saveClients(clients);
+  closeModal();
+  render();
+}
+
+function deleteClient(id) {
+  if (!confirm('Удалить клиента?')) return;
+  clients = clients.filter(x => x.id !== id);
+  saveClients(clients);
+  closeModal();
+  render();
+}
+
+function openNewClient() {
+  console.log('Открываю форму нового клиента');
+  document.getElementById('modalContent').innerHTML = `
+    <h2>Новый клиент</h2>
+    <label>Имя</label>
+    <input id="newName" placeholder="Анна">
+    <label>Телефон (для WhatsApp)</label>
+    <input id="newPhone" placeholder="+7914...">
+    <label>Услуга</label>
+    <select id="newService">${SERVICES.map(s => `<option>${s.name}</option>`).join('')}</select>
+    <label>Следующий визит</label>
+    <input type="date" id="newNext">
+    <button type="button" class="btn btn-primary btn-full" style="margin-top:16px" onclick="createClient()">Создать</button>
+  `;
+  document.getElementById('modalBg').classList.add('open');
+  const el = document.getElementById('newName');
+  if (el) el.focus();
+}
+
+function createClient() {
+  const name = document.getElementById('newName').value.trim();
+  if (!name) return alert('Введите имя');
+  const c = {
+    id: 'c' + Date.now(),
+    name,
+    phone: document.getElementById('newPhone').value.trim(),
+    service: document.getElementById('newService').value,
+    nextVisit: document.getElementById('newNext').value || null,
+    notes: '',
+    history: []
+  };
+  clients.push(c);
+  saveClients(clients);
+  closeModal();
+  render();
+}
+
+function closeModal() {
+  document.getElementById('modalBg').classList.remove('open');
+}
+
+// ============ ИНИЦИАЛИЗАЦИЯ ============
+function init() {
+  console.log('✅ init() запущен');
+
+  const fab = document.getElementById('fabAdd');
+  if (!fab) { console.error('❌ Кнопка fabAdd не найдена'); return; }
+  fab.addEventListener('click', openNewClient);
+
+  document.querySelectorAll('.tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTab = btn.dataset.tab;
+      render();
+    });
+  });
+
+  document.getElementById('modalBg').addEventListener('click', e => {
+    if (e.target.id === 'modalBg') closeModal();
+  });
+
+  render();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
+// Глобальные функции для onclick
+window.openClient = openClient;
+window.saveClient = saveClient;
+window.deleteClient = deleteClient;
+window.markVisited = markVisited;
+window.setNext = setNext;
+window.createClient = createClient;
+</script>
